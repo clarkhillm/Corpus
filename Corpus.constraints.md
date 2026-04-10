@@ -50,9 +50,11 @@ purpose:
 - Corpus MUST 实施最小权限：Organ 只能调用其被授权的 capability 与数据范围。
 - 审计日志 MUST 不记录敏感明文（密钥、令牌、个人敏感信息）；必要时记录哈希或脱敏摘要。
 
-## 3. Nerve 消息契约（最小可落地集合）
+## 3. Nerve 消息契约（语义约束）
+> **说明：** 本节约束的是**语义能力**，不规定具体字段名、序列化格式或传输协议。子项目 MAY 使用 JSON、Protobuf、Avro 或任何等价格式。下方 JSON 结构均为**参考示例**，仅用于说明需要承载哪些语义，不构成字段级强制约束。
+
 ### 3.1 统一信封（Envelope）
-所有消息 MUST 使用统一信封；字段名与类型 MUST 保持稳定。
+每条消息 MUST 在信封层承载以下语义能力；具体字段命名与结构由子项目自行决定。
 
 ```json
 {
@@ -73,10 +75,10 @@ purpose:
 }
 ```
 
-约束：
-- request_id MUST 全局唯一，并贯穿一次业务调用链。
-- trace_id SHOULD 支持分布式追踪关联。
-- idempotency_key SHOULD 在会触发外部副作用时提供。
+语义约束（下方字段名仅供参考）：
+- 调用唯一标识 MUST 全局唯一，并贯穿一次业务调用链。
+- 分布式追踪标识 SHOULD 支持跨服务关联。
+- 幂等键 SHOULD 在会触发外部副作用的调用中提供。
 
 ### 3.2 调用（invoke）
 ```json
@@ -114,10 +116,10 @@ purpose:
 }
 ```
 
-约束：
-- confidence MUST 在 [0, 1] 区间。
-- 当 status=error 时，error MUST 存在。
-- 当 status=ok 时，output MUST 存在（可以为空对象）。
+语义约束（下方字段名仅供参考）：
+- 置信度 MUST 在 [0, 1] 区间。
+- 当响应为错误时，错误信息 MUST 存在。
+- 当响应为成功时，输出内容 MUST 存在（可以为空）。
 
 ### 3.4 注册（register）
 Organ 启动后 SHOULD 先 register，再进入 heartbeat/health。
@@ -149,7 +151,7 @@ Organ 启动后 SHOULD 先 register，再进入 heartbeat/health。
 - Organ SHOULD 上报：版本、负载、队列长度、最近错误摘要（脱敏）。
 
 ## 4. Corpus 的“确定性转化”约束（决策器最小语义）
-Corpus MUST 对每次 Organ 输出生成 Decision Record：
+Corpus MUST 对每次 Organ 输出生成决策记录（Decision Record）。以下 JSON 为**参考示例**，子项目可用等价结构替代，不要求字段名一致。
 
 ```json
 {
@@ -168,19 +170,19 @@ Corpus MUST 对每次 Organ 输出生成 Decision Record：
 }
 ```
 
-约束：
-- Corpus MUST NOT 以“默认采纳”方式吞掉不确定性；每个 commit/reject MUST 有 reasons。
-- policy_version MUST 可追溯（例如配置版本、策略表版本）。
+语义约束（下方字段名仅供参考）：
+- Corpus MUST NOT 以"默认采纳"方式吞掉不确定性；每次采纳或拒绝 MUST 有可审计的理由记录。
+- 决策所依据的策略版本 MUST 可追溯（例如配置版本、策略表版本）。
 
 ## 5. 失败语义（统一处理）
-- 超时：当超过 constraints.timeout_ms，Corpus MUST 终止等待，并进入 fallback 或 reject。
-- 重试：仅当 error.retryable=true 且 side_effects=none 时，Corpus MAY 自动重试。
+- 超时：当超过约定超时时限，Corpus MUST 终止等待，并进入 fallback 或 reject。
+- 重试：仅当 Organ 明确标记可重试且调用无外部副作用时，Corpus MAY 自动重试。
 - 熔断：当某 Organ 在窗口期内持续失败，Corpus SHOULD 暂停向其派发并切换备用 Organ。
 - 降级：当所有候选 Organ 不可用，Corpus MUST 返回可预期的降级结果，并记录审计事件。
 
 ## 6. 安全与合规（最小要求）
 - Corpus MUST 有 Organ 白名单/信任策略（至少基于 organ_id + 版本约束）。
-- Nerve MUST 支持认证（mTLS/token/signature 任选一种或组合），并可在审计中引用 credential_ref。
+- Nerve MUST 支持认证（mTLS/token/signature 任选一种或组合），并可在审计中引用可追溯的凭证标识（不记录凭证明文）。
 - 所有审计事件 MUST 脱敏；PII/密钥/令牌 MUST NOT 落盘。
 
 ## 7. 可观测性（调试与运营必需字段）
@@ -190,7 +192,7 @@ Corpus MUST 对每次 Organ 输出生成 Decision Record：
 ## 8. Organ 接入验收清单（可自动化）
 - 仅使用 Nerve 通信；无旁路调用（MUST）。
 - 提供 register + health + heartbeat（SHOULD）。
-- capability 输入输出可验证（至少 JSON Schema ref 或等价机制）（SHOULD）。
-- 输出包含 confidence + evidence（当业务需要可追溯时 MUST）（按 Corpus 策略启用）。
+- capability 输入输出 SHOULD 可机器验证（如 JSON Schema、IDL 或等价机制）。
+- 输出 SHOULD 包含置信度与溯源证据（当业务需要可追溯时 MUST，按 Corpus 策略启用）。
 - 支持超时/取消（SHOULD）。
 
