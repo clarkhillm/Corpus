@@ -1,7 +1,7 @@
 # Corpus / Organ / Nerve 约束文档（AI 可执行版）
 status: draft
 version: 0.1
-source: Corpus.md
+source: Corpus.principles.md
 audience:
   - LLM-agent
   - tool-agent
